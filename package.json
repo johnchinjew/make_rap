@@ -1,0 +1,33 @@
+{
+  "name": "make_rap",
+  "version": "0.0.0",
+  "description": "Twitter bot that generates raps from tweets!",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnchinjew/make_rap.git"
+  },
+  "keywords": [
+    "twitter",
+    "bot",
+    "rap"
+  ],
+  "author": "John Chin-Jew <hi@johnchinjew.com>",
+  "bugs": {
+    "url": "https://github.com/johnchinjew/make_rap/issues"
+  },
+  "homepage": "https://github.com/johnchinjew/make_rap#readme",
+  "dependencies": {
+    "datamuse": "^1.0.5",
+    "dotenv": "^4.0.0",
+    "swearjar": "^0.2.0",
+    "twit": "^2.2.9"
+  },
+  "engines": {
+    "node": "6.10.3"
+  }
+}
