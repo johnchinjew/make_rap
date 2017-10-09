@@ -12,10 +12,11 @@ stream.on('tweet', t => {
   const receiverName = t.in_reply_to_screen_name
   const receivedId   = t.id_str
   const lang         = t.lang
-  const textRaw      = t.text // keeps the '@make_rap' prepended
+  const textRaw      = t.text // Keeps the '@make_rap' prepended
   const textBody     = textRaw.trim().slice(config.bot.screen_name.length+1) // '@make_rap' removed
   const textLastWord = (textBody.match(/\w+/g) || []).pop()
   const textShort    = ellipsizeMiddle(textBody, 32, '…')
+  const fetchMax     = Math.floor(config.rap.num_rhymes*.5) // Max rhymes for each request
 
   // Ignore conditions
   if (receiverName !== config.bot.screen_name) return
@@ -26,8 +27,8 @@ stream.on('tweet', t => {
 
   // Fetch rhymes
   Promise.all([
-    Datamuse.words({rel_rhy: textLastWord, max: config.rap.num_rhymes}),
-    Datamuse.words({rel_nry: textLastWord, max: config.rap.num_rhymes})
+    Datamuse.words({rel_rhy: textLastWord, max: fetchMax}),
+    Datamuse.words({rel_nry: textLastWord, max: fetchMax})
   ]).then(resps => {
     let rhymes = [].concat(...resps).map(w => w.word)
 
@@ -42,7 +43,8 @@ stream.on('tweet', t => {
     if (tries === config.bot.char_limit)
       console.log('Fail: Could not satisfy character limit.')
     
-    // Tweet rap (throttling?)
+    // Tweet rap
+    // TODO: Throttling!
     tweetInReply(senderName, receivedId, rap)
   
   }, err => {
@@ -65,7 +67,7 @@ console.log('RUNNING...')
 
 function ellipsizeMiddle(str, numCharsKept) {
   const l = str.length
-  const i = numCharsKept * .5
+  const i = numCharsKept*.5
   if (l <= numCharsKept)
     return str
   return rtrim(str.slice(0, Math.ceil(i)))

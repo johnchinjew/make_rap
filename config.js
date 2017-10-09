@@ -17,7 +17,7 @@ config.bot.keys.access_token_secret = process.env.ACCESS_TOKEN_SECRET
 // Rap config settings
 config.rap             = {}
 config.rap.num_lines   = 4
-config.rap.num_rhymes  = 48 // Num rhymes to fetch (>= num '_' in any rap)
+config.rap.num_rhymes  = 64 // Num rhymes to fetch (>= num '_' in any rap)
 config.rap.max_retries = 32 // Max retries for making a rap for a tweet
 
 // Templates for generating raps
