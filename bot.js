@@ -1,90 +1,54 @@
-require('dotenv').config()           // For accessing .env variables
-const Twit     = require('twit')     // For interacting w/ Twitter API
-const Datamuse = require('datamuse') // For fetching rhymes
-const SwearJar = require('swearjar') // Profanity checking
+const Twit     = require('twit')
+const Datamuse = require('datamuse')
+const SwearJar = require('swearjar')
+const config   = require('./config')
 
+const T = new Twit(config.bot.keys)
+const stream = T.stream('user')
 
-// Setup!
-// ------
-
-// Consts for Twitter bot/rap generation
-const SCREEN_NAME  = 'make_rap' // Twitter username w/o '@'
-const CHAR_LIMIT   = 140        // 140 chars per tweet max
-const NUM_LINES    = 4  // Lines per rap
-const NUM_RHYMES   = 48 // Num rhymes to fetch (must be >= num blanks in a rap)
-const MAX_ATTEMPTS = 32 // Max times to retry making a rap from a tweet
-
-// Setup Twitter stream auth w/ API keys from .env
-const T = new Twit({
-  consumer_key:        process.env.CONSUMER_KEY,
-  consumer_secret:     process.env.CONSUMER_SECRET,
-  access_token:        process.env.ACCESS_TOKEN,
-  access_token_secret: process.env.ACCESS_TOKEN_SECRET,
-  timeout_ms:          60 * 1000, // Optional timeout for all HTTP requests
-})
-
-const TStream = T.stream('user')
-
-
-// Listen for tweets...
-// --------------------
-
-TStream.on('tweet', t => {
+// Listen for tweets
+stream.on('tweet', t => {
   const senderName   = t.user.screen_name
   const receiverName = t.in_reply_to_screen_name
   const receivedId   = t.id_str
-  const text         = t.text // Twitter trims whitespace from front
   const lang         = t.lang
+  const textRaw      = t.text // keeps the '@make_rap' prepended
+  const textBody     = textRaw.trim().slice(config.bot.screen_name.length+1) // '@make_rap' removed
+  const textLastWord = (textBody.match(/\w+/g) || []).pop()
+  const textShort    = ellipsizeMiddle(textBody, 32, '…')
 
-  // Ignore tweets not aimed at the bot
-  if (receiverName !== SCREEN_NAME)
-    return
+  // Ignore conditions
+  if (receiverName !== config.bot.screen_name) return
+  if (senderName === config.bot.screen_name)   {console.log('Ignored: Sent from the bot itself.'); return}
+  if (SwearJar.profane(textRaw))       {console.log('Ignored: Contains profanity.');    return}
+  if (lang !== 'en' && lang !== 'und') {console.log('Ignored: Non-English language.');  return}
+  if (!textBody || !textLastWord)      {console.log('Ignored: Not enough valid text.'); return}
 
-  // Ignore tweets from the bot itself
-  if (senderName === receiverName) {
-    console.log('Tweet ignored: Sent from the bot itself.')
-    return
-  }
+  // Fetch rhymes
+  Promise.all([
+    Datamuse.words({rel_rhy: textLastWord, max: config.rap.num_rhymes}),
+    Datamuse.words({rel_nry: textLastWord, max: config.rap.num_rhymes})
+  ]).then(resps => {
+    let rhymes = [].concat(...resps).map(w => w.word)
 
-  // Ignore tweets with profanity
-  if (SwearJar.profane(text)) {
-    console.log('Tweet ignored: Contains profanity.')
-    return
-  }
-
-  // Try to ignore non-English tweets
-  if (lang !== 'en' && lang !== 'und') {
-    console.log('Tweet ignored: Non-English language.')
-    return
-  }
-
-  // Remove '@make_rap' from front of text
-  const textBody = text.slice(SCREEN_NAME.length + 1)
-
-  // Ignore tweets w/o text beyond the '@make_rap'
-  if (!textBody) {
-    console.log('Tweet ignored: Not enough valid text.')
-    return
-  }
-
-  // Extract last word from text body
-  const lastWord = (textBody.match(/\w+/g) || []).pop()
-
-  // Ignore tweets w/o a detectable last word
-  if (!lastWord) {
-    console.log('Tweet ignored: Not enough valid text.')
-    return
-  }
-
-  // Ellipsize first line of rap if too long
-  const firstLine = ellipsizeMiddle(textBody, 32, '…')
-
-  // Fetch rhymes...
-
-  // Generate rap...
-
-  // Tweet rap...
-
+    // Generate rap
+    let rap = makeRap(textShort, rhymes, config.rap.num_lines)
+    let tries = 0
+    if (!rap) return
+    while (rap.length > config.bot.char_limit && tries < config.rap.max_retries) {
+      rap = makeRap(textShort, rhymes, config.rap.num_lines)
+      tries++
+    }
+    if (tries === config.bot.char_limit)
+      console.log('Fail: Could not satisfy character limit.')
+    
+    // Tweet rap (throttling?)
+    tweetInReply(senderName, receivedId, rap)
+  
+  }, err => {
+    console.log('Fail: Could not fetch rhymes.')
+    console.log(err)
+  })
 })
 
 
@@ -96,8 +60,8 @@ console.log('(Made w/ <3 by @johnchinjew)')
 console.log('RUNNING...')
 
 
-// Helper functions, thanks little guys!
-// -------------------------------------
+// Helper functions, thanks guys!
+// ------------------------------
 
 function ellipsizeMiddle(str, numCharsKept) {
   const l = str.length
@@ -105,8 +69,55 @@ function ellipsizeMiddle(str, numCharsKept) {
   if (l <= numCharsKept)
     return str
   return rtrim(str.slice(0, Math.ceil(i)))
-    + '…' + ltrim(str.slice(l - Math.floor(i), l))
+    +'…'+ltrim(str.slice(l - Math.floor(i), l))
 }
 
 function ltrim(str) {return str.replace(/^\s+/, '')}
 function rtrim(str) {return str.replace(/\s+$/, '')}
+
+function shuffled(a) {
+  let i = a.length, j
+  while (i > 0) {
+    j = (Math.random() * i--) | 0
+    const t = a[i]
+    a[i] = a[j]
+    a[j] = t
+  }
+  return a
+}
+
+function makeRap(firstLine, validRhymes, numLines) {
+  let lines  = shuffled(config.rap.templates.slice())
+  let rhymes = shuffled(validRhymes.slice())
+  let rap = firstLine
+  for (let i = 0; i < numLines-1; i++)
+    rap += '\n' + lines.pop()
+  if (rhymes.length < rap.match(/_/g).length) {
+    console.log('Error: Can\'t make rap, not enough rhymes.')
+    return undefined
+  }
+  if (lines.length < numLines) {
+    console.log('Error: Can\'t make rap, not enough templates.')
+    return undefined
+  }
+  return rap.split('').map(c => (c === '_') ? rhymes.pop() : c).join('')
+}
+
+function tweetInReply(receiver, id, body) {
+  const payload = {
+    in_reply_to_status_id: id,
+    status: '@' + receiver + ' ' + body
+  }
+  T.post('statuses/update', payload, tweetPosted)
+}
+
+function tweetPosted(err, data, resp) {
+  if (err) {
+    console.log('ERROR: Issue posting tweet.')
+    console.log(err)
+    return
+  }
+  const receiver = data.in_reply_to_screen_name
+  const when     = data.created_at
+  console.log('Success: Rap sent to @' + receiver, '(' + when + ')')
+}
