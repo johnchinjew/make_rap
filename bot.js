@@ -11,19 +11,31 @@ stream.on('tweet', t => {
   const senderName   = t.user.screen_name
   const receiverName = t.in_reply_to_screen_name
   const receivedId   = t.id_str
+  const when         = t.created_at
   const lang         = t.lang
-  const textRaw      = t.text // Keeps the '@make_rap' prepended to the front of the tweet
-  const textBody     = textRaw.trim().slice(config.bot.screen_name.length+1) // '@make_rap' removed
+  const textRaw      = t.text // Keeps the '@make_rap' prefix
+  const textBody     = ltrim(textRaw.slice(config.bot.screen_name.length+1)) // Removes the '@make_rap' prefix
   const textLastWord = (textBody.match(/\w+/g) || []).pop()
-  const textShort    = ellipsizeMiddle(textBody, 32, '…')
+  const textShort    = ellipFront(rtrim(textBody), 18)
   const fetchMax     = Math.floor(config.rap.num_rhymes*.5) // Max rhymes for each request
 
-  // Ignore conditions
-  if (receiverName !== config.bot.screen_name) return
-  if (senderName === config.bot.screen_name)   {console.log('Ignored: Sent from the bot itself.'); return}
-  if (SwearJar.profane(textRaw))       {console.log('Ignored: Contains profanity.');    return}
-  if (lang !== 'en' && lang !== 'und') {console.log('Ignored: Non-English language.');  return}
-  if (!textBody || !textLastWord)      {console.log('Ignored: Not enough valid text.'); return}
+  if (receiverName !== config.bot.screen_name)
+    return // Log nothing, triggered too often
+
+  if (senderName === config.bot.screen_name) {
+    console.log('Ignored: Sent from the bot itself.'); return}
+
+  if (SwearJar.profane(textRaw)) {
+    console.log('Ignored: Contains profanity.'); return}
+
+  if (lang !== 'en' && lang !== 'und') {
+    console.log('Ignored: Non-English language.'); return}
+
+  if (!textBody || !textLastWord) {
+    console.log('Ignored: Not enough valid text.'); return}
+
+  // Recieved valid tweet!
+  console.log('Note: Tweet recieved from @' + senderName + ' (' + when + ')')
 
   // Fetch rhymes
   Promise.all([
@@ -33,18 +45,36 @@ stream.on('tweet', t => {
     let rhymes = [].concat(...resps).map(w => w.word)
 
     // Generate rap
-    let rap = makeRap(textShort, rhymes, config.rap.num_lines)
+    let r = compileRap(textShort, rhymes, config.rap.num_lines)
+    if (!r) return
     let tries = 0
-    if (!rap) return
-    while (rap.length > config.bot.char_limit && tries < config.rap.max_retries) {
-      rap = makeRap(textShort, rhymes, config.rap.num_lines)
+    let length = r.length
+    let limit = config.bot.char_limit - senderName.length - 2
+
+    while (length > limit && tries < config.rap.max_retries) {
+      r = compileRap(textShort, rhymes, config.rap.num_lines)
       tries++
     }
-    if (tries === config.bot.char_limit)
-      console.log('Fail: Could not satisfy character limit.')
+
+    if (tries === config.bot.max_retries) {
+      console.log('Fail: Could not satisfy character limit.'); return}
 
     // Tweet rap (w/ 'dispersion throttling')
-    disperse(() => tweetInReply(senderName, receivedId, rap))
+    disperse(() => {
+      T.post('statuses/update', {
+        in_reply_to_status_id: id,
+        status: '@' + receiver + ' ' + body
+      }, (err, data, resp) => {
+        if (err) {
+          console.log('ERROR: Issue posting tweet.')
+          console.log(err)
+          return
+        }
+        const receiver = data.in_reply_to_screen_name
+        const when     = data.created_at
+        console.log('Success: Rap sent to @' + receiver, '(' + when + ')')
+      })
+    }, 500, 6500)
 
   }, err => {
     console.log('Fail: Could not fetch rhymes.')
@@ -52,21 +82,9 @@ stream.on('tweet', t => {
   })
 })
 
-// Terminal says hello :)
-console.log('  _ \\                _ )        |   \n    \/   _` |  _ \\    _ \\   _ \\   _| \n _|_\\ \\__,_| .__\/   ___\/ \\___\/ \\__| \n            _|')
-console.log('(Made w/ <3 by @johnchinjew)')
-console.log('RUNNING...')
-
-
-// Helper functions, thanks guys!
-// Ellipsize strings from the middle
-function ellipsizeMiddle(str, numCharsKept) {
-  const l = str.length
-  const i = numCharsKept*.5
-  if (l <= numCharsKept)
-    return str
-  return rtrim(str.slice(0, Math.ceil(i)))
-    +'…'+ltrim(str.slice(l - Math.floor(i), l))
+function ellipFront(str, numCharsKept) {
+  const  l = str.length
+  return l > numCharsKept ? '…' + ltrim(str.substring(l - numCharsKept, l)) : str
 }
 
 function ltrim(str) {return str.replace(/^\s+/, '')}
@@ -94,38 +112,30 @@ function disperse(fn, soonest=5000, latest=soonest+15000) {
   }
 }
 
-function makeRap(firstLine, validRhymes, numLines) {
+// Returns a rap given the first line for the rap, an array of valid rhymes,
+// and the number of lines desired in the finished rap
+// Returns undefined if there if cannot make rap
+function compileRap(firstLine, validRhymes, numLines) {
   let lines  = shuffled(config.rap.templates.slice())
   let rhymes = shuffled(validRhymes.slice())
+  let numNewLines = numLines-1
   let rap = firstLine
-  for (let i = 0; i < numLines-1; i++)
+
+  for (let i = 0; i < numNewLines; i++)
     rap += '\n' + lines.pop()
+
   if (rhymes.length < rap.match(/_/g).length) {
     console.log('Error: Can\'t make rap, not enough rhymes.')
-    return undefined
-  }
-  if (lines.length < numLines) {
+    return undefined }
+
+  if (lines.length < numNewLines) {
     console.log('Error: Can\'t make rap, not enough templates.')
-    return undefined
-  }
+    return undefined }
+
   return rap.split('').map(c => (c === '_') ? rhymes.pop() : c).join('')
 }
 
-function tweetInReply(receiver, id, body) {
-  const payload = {
-    in_reply_to_status_id: id,
-    status: '@' + receiver + ' ' + body
-  }
-  T.post('statuses/update', payload, tweetPosted)
-}
-
-function tweetPosted(err, data, resp) {
-  if (err) {
-    console.log('ERROR: Issue posting tweet.')
-    console.log(err)
-    return
-  }
-  const receiver = data.in_reply_to_screen_name
-  const when     = data.created_at
-  console.log('Success: Rap sent to @' + receiver, '(' + when + ')')
-}
+// Terminal says hello :)
+console.log('  _ \\                _ )        |   \n    \/   _` |  _ \\    _ \\   _ \\   _| \n _|_\\ \\__,_| .__\/   ___\/ \\___\/ \\__| \n            _|')
+console.log('(Made w/ <3 by @johnchinjew)')
+console.log('RUNNING...')
