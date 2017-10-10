@@ -9,8 +9,8 @@ const stream = T.stream('user')
 // Listen for tweets
 stream.on('tweet', t => {
   const senderName   = t.user.screen_name
+  const senderId     = t.id_str
   const receiverName = t.in_reply_to_screen_name
-  const receivedId   = t.id_str
   const when         = t.created_at
   const lang         = t.lang
   const textRaw      = t.text // Keeps the '@make_rap' prefix
@@ -35,44 +35,40 @@ stream.on('tweet', t => {
     console.log('Ignored: Not enough valid text.'); return}
 
   // Recieved valid tweet!
-  console.log('Note: Tweet recieved from @' + senderName + ' (' + when + ')')
+  console.log('Note: Tweet recieved from @'+senderName+ ' ('+when+')')
 
   // Fetch rhymes
   Promise.all([
-    Datamuse.words({rel_rhy: textLastWord, max: fetchMax}),
-    Datamuse.words({rel_nry: textLastWord, max: fetchMax})
   ]).then(resps => {
     let rhymes = [].concat(...resps).map(w => w.word)
 
-    // Generate rap
-    let r = compileRap(textShort, rhymes, config.rap.num_lines)
-    if (!r) return
-    let tries = 0
-    let length = r.length
-    let limit = config.bot.char_limit - senderName.length - 2
+    // Generate rap satisfying Twitter char limit
+    let rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)
+    if (!rapToTweet) return
 
-    while (length > limit && tries < config.rap.max_retries) {
-      r = compileRap(textShort, rhymes, config.rap.num_lines)
+    const trueCharLimit = config.bot.char_limit - senderName.length - 2
+    let tries = 0
+
+    while (rapToTweet.length > trueCharLimit && tries < config.rap.max_retries) {
+      rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)
       tries++
     }
 
-    if (tries === config.bot.max_retries) {
+    if (rapToTweet.length > trueCharLimit) {
       console.log('Fail: Could not satisfy character limit.'); return}
 
-    // Tweet rap (w/ 'dispersion throttling')
+    // Tweet rap in reply to sender (w/ dispersion throttling)
     disperse(() => {
       T.post('statuses/update', {
-        in_reply_to_status_id: id,
-        status: '@' + receiver + ' ' + body
+        in_reply_to_status_id: senderId,
+        status: '@' + senderName + ' ' + rapToTweet,
       }, (err, data, resp) => {
         if (err) {
-          console.log('ERROR: Issue posting tweet.')
+          console.log('Error: Issue posting tweet.')
           console.log(err)
           return
         }
-        const receiver = data.in_reply_to_screen_name
-        const when     = data.created_at
-        console.log('Success: Rap sent to @' + receiver, '(' + when + ')')
+        console.log('Success: Rap sent to @'+data.in_reply_to_screen_name, '('+data.created_at+')')
       })
     }, 500, 6500)
 
