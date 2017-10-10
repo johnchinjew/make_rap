@@ -39,8 +39,17 @@ stream.on('tweet', t => {
 
   // Fetch rhymes
   Promise.all([
+    Datamuse.words({rel_rhy: textLastWord, max: fetchMax, md: 'p'}),
+    Datamuse.words({rel_nry: textLastWord, max: fetchMax, md: 'p'})
   ]).then(resps => {
-    let rhymes = [].concat(...resps).map(w => w.word)
+    // Flatten responses and extract nouns
+    let rhymes = [].concat(...resps).map(w => {
+      if ('tags' in w) {
+        if (w.tags.includes('n'))
+          return w.word
+      }
+      return false
+    }).filter(w => w)
 
     // Generate rap satisfying Twitter char limit
     let rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)

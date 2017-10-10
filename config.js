@@ -36,7 +36,7 @@ config.rap.templates = [
   "cruisin down main wit my ultra _",
   "y'know nothin can stop my super _",
   "i be that _, ya stuck as a _",
-  "dont think ya wanna get on my _",
+  "do ya think u cud pickup my _",
   "we're the _, kickin _ n chewin _",
   "cant stop me, im top of the _",
   "yall cant take _, you or your _",
@@ -47,6 +47,7 @@ config.rap.templates = [
   "takin vacation, down at the _",
   "im king of _, u only be a _",
   "24/7 cant never reach my _",
+  "this a _, this a _, this a _",
 ]
 
 module.exports = config
