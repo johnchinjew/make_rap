@@ -119,7 +119,7 @@ function disperse(fn, soonest=5000, latest=soonest+15000) {
 
 // Returns a rap given the first line for the rap, an array of valid rhymes,
 // and the number of lines desired in the finished rap
-// Returns undefined if there if cannot make rap
+// Returns undefined if cannot make rap
 function compileRap(firstLine, validRhymes, numLines) {
   let lines  = shuffled(config.rap.templates.slice())
   let rhymes = shuffled(validRhymes.slice())
