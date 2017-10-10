@@ -1,6 +1,6 @@
 {
   "name": "make_rap",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Twitter bot that generates raps from tweets!",
   "main": "bot.js",
   "scripts": {

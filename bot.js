@@ -12,7 +12,7 @@ stream.on('tweet', t => {
   const receiverName = t.in_reply_to_screen_name
   const receivedId   = t.id_str
   const lang         = t.lang
-  const textRaw      = t.text // Keeps the '@make_rap' prepended
+  const textRaw      = t.text // Keeps the '@make_rap' prepended to the front of the tweet
   const textBody     = textRaw.trim().slice(config.bot.screen_name.length+1) // '@make_rap' removed
   const textLastWord = (textBody.match(/\w+/g) || []).pop()
   const textShort    = ellipsizeMiddle(textBody, 32, '…')
@@ -42,29 +42,24 @@ stream.on('tweet', t => {
     }
     if (tries === config.bot.char_limit)
       console.log('Fail: Could not satisfy character limit.')
-    
-    // Tweet rap
-    // TODO: Throttling!
-    tweetInReply(senderName, receivedId, rap)
-  
+
+    // Tweet rap (w/ 'dispersion throttling')
+    disperse(() => tweetInReply(senderName, receivedId, rap))
+
   }, err => {
     console.log('Fail: Could not fetch rhymes.')
     console.log(err)
   })
 })
 
-
 // Terminal says hello :)
-// ----------------------
-
 console.log('  _ \\                _ )        |   \n    \/   _` |  _ \\    _ \\   _ \\   _| \n _|_\\ \\__,_| .__\/   ___\/ \\___\/ \\__| \n            _|')
 console.log('(Made w/ <3 by @johnchinjew)')
 console.log('RUNNING...')
 
 
 // Helper functions, thanks guys!
-// ------------------------------
-
+// Ellipsize strings from the middle
 function ellipsizeMiddle(str, numCharsKept) {
   const l = str.length
   const i = numCharsKept*.5
@@ -77,6 +72,7 @@ function ellipsizeMiddle(str, numCharsKept) {
 function ltrim(str) {return str.replace(/^\s+/, '')}
 function rtrim(str) {return str.replace(/\s+$/, '')}
 
+// Returns a randomly shuffled array
 function shuffled(a) {
   let i = a.length, j
   while (i > 0) {
@@ -86,6 +82,16 @@ function shuffled(a) {
     a[j] = t
   }
   return a
+}
+
+// Disperses function invocation randomly over time range
+function disperse(fn, soonest=5000, latest=soonest+15000) {
+  if (soonest < 0 || latest < soonest)
+    return false
+  const t = setTimeout(fn, soonest + Math.floor(Math.random() * (latest-soonest+1)))
+  return {
+    cancel: () => clearTimeout(t)
+  }
 }
 
 function makeRap(firstLine, validRhymes, numLines) {
