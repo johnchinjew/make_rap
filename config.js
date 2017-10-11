@@ -43,7 +43,7 @@ config.rap.templates = [
   "stole your _, bouta steal your _",
   "_! so many chains on my _",
   "so many likes on the gram—lika _",
-  "everyone y'know calls me _",
+  "eryone y'know calls me _",
   "takin vacation, down at the _",
   "im king of _, u only be a _",
   "24/7 cant never reach my _",
