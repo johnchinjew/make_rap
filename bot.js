@@ -71,15 +71,20 @@ stream.on('tweet', t => {
       return false
     }).filter(w => w)
 
-    // Generate rap satisfying Twitter char limit
+    // Generate rap
     rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)
-    while ((!rapToTweet || rapToTweet.length > trueCharLimit) && tries < config.rap.max_retries) {
+
+    if (!rapToTweet)
+      return // It is impossible to make a rap given the current arguments
+
+    // Try to satisfy Twitter char limit
+    while (rapToTweet.length > trueCharLimit && tries < config.rap.max_retries) {
       rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)
       tries++
     }
 
     // Couldn't satisfy character limit
-    if (!rapToTweet || rapToTweet.length > trueCharLimit) {
+    if (rapToTweet.length > trueCharLimit) {
       console.log('Fail: Could not satisfy character limit.');
       return
     }
