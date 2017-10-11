@@ -1,49 +1,66 @@
-const Twit     = require('twit')
+const Twit = require('twit')
 const Datamuse = require('datamuse')
 const SwearJar = require('swearjar')
-const config   = require('./config')
+const config = require('./config')
 
 const T = new Twit(config.bot.keys)
 const stream = T.stream('user')
 
 // Listen for tweets
 stream.on('tweet', t => {
-  const senderName   = t.user.screen_name
-  const senderId     = t.id_str
+  const senderName = t.user.screen_name
+  const senderId = t.id_str
   const receiverName = t.in_reply_to_screen_name
-  const when         = t.created_at
-  const lang         = t.lang
-  const textRaw      = t.text // Keeps the '@make_rap' prefix
-  const textBody     = ltrim(textRaw.slice(config.bot.screen_name.length+1)) // Removes the '@make_rap' prefix
+  const when = t.created_at
+  const lang = t.lang
+  const textRaw = t.text // Keeps the '@make_rap' prefix
+  const textBody = ltrim(textRaw.slice(config.bot.screen_name.length + 1)) // Removes the '@make_rap' prefix
   const textLastWord = (textBody.match(/\w+/g) || []).pop()
-  const textShort    = ellipFront(rtrim(textBody), 18)
-  const fetchMax     = Math.floor(config.rap.num_rhymes*.5) // Max rhymes for each request
+  const textShort = ellipFront(rtrim(textBody), 18)
+  const fetchMax = Math.floor(config.rap.num_rhymes * .5) // Max rhymes for each request
 
   if (receiverName !== config.bot.screen_name)
     return // Log nothing, triggered too often
 
   if (senderName === config.bot.screen_name) {
-    console.log('Ignored: Sent from the bot itself.'); return}
+    console.log('Ignored: Sent from the bot itself.');
+    return
+  }
 
   if (SwearJar.profane(textRaw)) {
-    console.log('Ignored: Contains profanity.'); return}
+    console.log('Ignored: Contains profanity.');
+    return
+  }
 
   if (lang !== 'en' && lang !== 'und') {
-    console.log('Ignored: Non-English language.'); return}
+    console.log('Ignored: Non-English language.');
+    return
+  }
 
   if (!textBody || !textLastWord) {
-    console.log('Ignored: Not enough valid text.'); return}
+    console.log('Ignored: Not enough valid text.');
+    return
+  }
 
   // Recieved valid tweet!
-  console.log('Note: Tweet recieved from @'+senderName+ ' ('+when+')')
+  console.log('Note: Tweet recieved from @' + senderName + ' (' + when + ')')
 
   // Fetch rhymes
   Promise.all([
-    Datamuse.words({rel_rhy: textLastWord, max: fetchMax, md: 'p'}),
-    Datamuse.words({rel_nry: textLastWord, max: fetchMax, md: 'p'})
+    Datamuse.words({
+      rel_rhy: textLastWord,
+      max: fetchMax,
+      md: 'p'
+    }),
+    Datamuse.words({
+      rel_nry: textLastWord,
+      max: fetchMax,
+      md: 'p'
+    })
   ]).then(resps => {
     const trueCharLimit = config.bot.char_limit - senderName.length - 2
-    let rapToTweet = "", tries = 0
+    let rapToTweet = "",
+      tries = 0
 
     // Flatten responses and extract nouns
     let rhymes = [].concat(...resps).map(w => {
@@ -63,7 +80,9 @@ stream.on('tweet', t => {
 
     // Couldn't satisfy character limit
     if (!rapToTweet || rapToTweet.length > trueCharLimit) {
-      console.log('Fail: Could not satisfy character limit.'); return}
+      console.log('Fail: Could not satisfy character limit.');
+      return
+    }
 
     // Tweet rap in reply to sender (w/ dispersion throttling)
     disperse(() => {
@@ -76,7 +95,7 @@ stream.on('tweet', t => {
           console.log(err)
           return
         }
-        console.log('Success: Rap sent to @'+data.in_reply_to_screen_name, '('+data.created_at+')')
+        console.log('Success: Rap sent to @' + data.in_reply_to_screen_name, '(' + data.created_at + ')')
       })
     }, 500, 6500)
 
@@ -87,16 +106,22 @@ stream.on('tweet', t => {
 })
 
 function ellipFront(str, numCharsKept) {
-  const  l = str.length
+  const l = str.length
   return l > numCharsKept ? '…' + ltrim(str.substring(l - numCharsKept, l)) : str
 }
 
-function ltrim(str) {return str.replace(/^\s+/, '')}
-function rtrim(str) {return str.replace(/\s+$/, '')}
+function ltrim(str) {
+  return str.replace(/^\s+/, '')
+}
+
+function rtrim(str) {
+  return str.replace(/\s+$/, '')
+}
 
 // Returns a randomly shuffled array
 function shuffled(a) {
-  let i = a.length, j
+  let i = a.length,
+    j
   while (i > 0) {
     j = (Math.random() * i--) | 0
     const t = a[i]
@@ -107,10 +132,10 @@ function shuffled(a) {
 }
 
 // Disperses function invocation randomly over time range
-function disperse(fn, soonest=5000, latest=soonest+15000) {
+function disperse(fn, soonest = 5000, latest = soonest + 15000) {
   if (soonest < 0 || latest < soonest)
     return false
-  const t = setTimeout(fn, soonest + Math.floor(Math.random() * (latest-soonest+1)))
+  const t = setTimeout(fn, soonest + Math.floor(Math.random() * (latest - soonest + 1)))
   return {
     cancel: () => clearTimeout(t)
   }
@@ -120,9 +145,9 @@ function disperse(fn, soonest=5000, latest=soonest+15000) {
 // and the number of lines desired in the finished rap
 // Returns undefined if cannot make rap
 function compileRap(firstLine, validRhymes, numLines) {
-  let lines  = shuffled(config.rap.templates.slice())
+  let lines = shuffled(config.rap.templates.slice())
   let rhymes = shuffled(validRhymes.slice())
-  let numNewLines = numLines-1
+  let numNewLines = numLines - 1
   let rap = firstLine
 
   for (let i = 0; i < numNewLines; i++)
@@ -130,11 +155,13 @@ function compileRap(firstLine, validRhymes, numLines) {
 
   if (rhymes.length < rap.match(/_/g).length) {
     console.log('Error: Can\'t make rap, not enough rhymes.')
-    return undefined }
+    return undefined
+  }
 
   if (lines.length < numNewLines) {
     console.log('Error: Can\'t make rap, not enough templates.')
-    return undefined }
+    return undefined
+  }
 
   return rap.split('').map(c => (c === '_') ? rhymes.pop() : c).join('')
 }
