@@ -42,6 +42,9 @@ stream.on('tweet', t => {
     Datamuse.words({rel_rhy: textLastWord, max: fetchMax, md: 'p'}),
     Datamuse.words({rel_nry: textLastWord, max: fetchMax, md: 'p'})
   ]).then(resps => {
+    const trueCharLimit = config.bot.char_limit - senderName.length - 2
+    let rapToTweet = "", tries = 0
+
     // Flatten responses and extract nouns
     let rhymes = [].concat(...resps).map(w => {
       if ('tags' in w) {
@@ -52,18 +55,14 @@ stream.on('tweet', t => {
     }).filter(w => w)
 
     // Generate rap satisfying Twitter char limit
-    let rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)
-    if (!rapToTweet) return
-
-    const trueCharLimit = config.bot.char_limit - senderName.length - 2
-    let tries = 0
-
-    while (rapToTweet.length > trueCharLimit && tries < config.rap.max_retries) {
+    rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)
+    while ((!rapToTweet || rapToTweet.length > trueCharLimit) && tries < config.rap.max_retries) {
       rapToTweet = compileRap(textShort, rhymes, config.rap.num_lines)
       tries++
     }
 
-    if (rapToTweet.length > trueCharLimit) {
+    // Couldn't satisfy character limit
+    if (!rapToTweet || rapToTweet.length > trueCharLimit) {
       console.log('Fail: Could not satisfy character limit.'); return}
 
     // Tweet rap in reply to sender (w/ dispersion throttling)
