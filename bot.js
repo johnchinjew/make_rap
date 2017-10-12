@@ -32,10 +32,11 @@ stream.on('tweet', t => {
     return
   }
 
-  if (lang !== 'en' && lang !== 'und') {
-    console.log('Ignored: Non-English language.');
-    return
-  }
+  // Commented out: Twitter has unexpected lang behavior
+  // if (lang !== 'en' && lang !== 'und') {
+  //   console.log('Ignored: Non-English language.');
+  //   return
+  // }
 
   if (!textBody || !textLastWord) {
     console.log('Ignored: Not enough valid text.');
